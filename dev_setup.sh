@@ -13,6 +13,9 @@ ensure_homebrew() {
         echo "🍺 Homebrew not found. Installing Homebrew..."
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     fi
+    # Ensure Homebrew is up to date
+    echo "🍺 Updating Homebrew..."
+    brew update
 }
 
 # Function to install command-line tools if they are missing
@@ -39,11 +42,10 @@ install_cli_if_missing() {
 # Function to install GUI applications if they are missing
 install_cask_if_missing() {
     local app_name=$1
-    local mdfind_query=$2
-    local brew_cask_name=$3
-    local app_grep_pattern=$4
+    local brew_cask_name=$2
 
-    if mdfind "$mdfind_query" | grep -q "$app_grep_pattern"; then
+    # Use 'brew list --cask' to check if the application is installed
+    if brew list --cask | grep -q "^${brew_cask_name}$"; then
         echo "✅ $app_name is already installed."
     else
         echo "$app_name not found. Preparing to install..."
@@ -61,9 +63,9 @@ install_cask_if_missing() {
 
 # --- Run Checks ---
 install_cli_if_missing "git" "git"
-install_cask_if_missing "Visual Studio Code" "kMDItemAppStoreIdentifier == 'com.microsoft.VSCode'" "visual-studio-code" "Visual Studio Code.app"
-install_cask_if_missing "Zoom" "kMDItemAppStoreIdentifier == 'us.zoom.xos'" "zoom" "zoom.us.app"
-install_cask_if_missing "Docker Desktop" "kMDItemCFBundleIdentifier == 'com.docker.docker'" "docker" "Docker.app"
+install_cask_if_missing "Visual Studio Code" "visual-studio-code"
+install_cask_if_missing "Zoom" "zoom"
+install_cask_if_missing "Docker Desktop" "docker"
 
 
 # --- Part 2: Docker Environment Setup ---
@@ -76,6 +78,12 @@ TAG="latest"
 DOCKERFILE_NAME="personal.Dockerfile"
 
 echo "Building the Docker image: $IMAGE_NAME:$TAG..."
+
+# Check if the Docker daemon is running
+if ! docker info &> /dev/null; then
+    echo "❌ Docker daemon is not running. Please start Docker Desktop and try again."
+    exit 1
+fi
 
 # Build the Docker image
 docker build -f "$DOCKERFILE_NAME" -t "$IMAGE_NAME:$TAG" .
