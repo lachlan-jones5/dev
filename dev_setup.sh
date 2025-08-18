@@ -1,45 +1,69 @@
 #!/bin/bash
 
 # --- dev_setup.sh ---
-# This script first ensures VS Code and Zoom are installed on macOS, then builds
-# and runs a container for an isolated Git environment.
+# This script first ensures Git, VS Code, Zoom, and Docker are installed on macOS,
+# then builds and runs a container for an isolated Git environment.
 
 # --- Part 1: Application Installation Checks ---
 echo "🔎 Checking for required applications..."
 
-# --- VS Code Check ---
-if mdfind "kMDItemAppStoreIdentifier == 'com.microsoft.VSCode'" | grep -q "Visual Studio Code.app"; then
-    echo "✅ Visual Studio Code is already installed."
-else
-    echo "VS Code not found. Preparing to install..."
+# Function to ensure Homebrew is installed and ready
+ensure_homebrew() {
     if ! command -v brew &> /dev/null; then
-        echo "🍺 Homebrew not found. Installing Homebrew first..."
+        echo "🍺 Homebrew not found. Installing Homebrew..."
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    else
-        echo "🍺 Homebrew is already installed. Updating..."
-        brew update
     fi
-    echo "📦 Installing Visual Studio Code using Homebrew..."
-    brew install --cask visual-studio-code
-    if [ $? -eq 0 ]; then echo "🚀 Successfully installed Visual Studio Code."; else echo "❌ Failed to install Visual Studio Code."; exit 1; fi
-fi
+}
 
-# --- Zoom Check ---
-if mdfind "kMDItemAppStoreIdentifier == 'us.zoom.xos'" | grep -q "zoom.us.app"; then
-    echo "✅ Zoom is already installed."
-else
-    echo "Zoom not found. Preparing to install..."
-    if ! command -v brew &> /dev/null; then
-        echo "🍺 Homebrew not found. Installing Homebrew first..."
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+# Function to install command-line tools if they are missing
+install_cli_if_missing() {
+    local tool_name=$1
+    local brew_package_name=$2
+
+    if command -v "$tool_name" &> /dev/null; then
+        echo "✅ $tool_name is already installed."
     else
-        echo "🍺 Homebrew is already installed. Updating..."
-        brew update
+        echo "$tool_name not found. Preparing to install..."
+        ensure_homebrew
+        echo "📦 Installing $tool_name using Homebrew..."
+        brew install "$brew_package_name"
+        if [ $? -eq 0 ]; then
+            echo "🚀 Successfully installed $tool_name."
+        else
+            echo "❌ Failed to install $tool_name."
+            exit 1
+        fi
     fi
-    echo "📦 Installing Zoom using Homebrew..."
-    brew install --cask zoom
-    if [ $? -eq 0 ]; then echo "🚀 Successfully installed Zoom."; else echo "❌ Failed to install Zoom."; exit 1; fi
-fi
+}
+
+# Function to install GUI applications if they are missing
+install_cask_if_missing() {
+    local app_name=$1
+    local mdfind_query=$2
+    local brew_cask_name=$3
+    local app_grep_pattern=$4
+
+    if mdfind "$mdfind_query" | grep -q "$app_grep_pattern"; then
+        echo "✅ $app_name is already installed."
+    else
+        echo "$app_name not found. Preparing to install..."
+        ensure_homebrew
+        echo "📦 Installing $app_name using Homebrew..."
+        brew install --cask "$brew_cask_name"
+        if [ $? -eq 0 ]; then
+            echo "🚀 Successfully installed $app_name."
+        else
+            echo "❌ Failed to install $app_name."
+            exit 1
+        fi
+    fi
+}
+
+# --- Run Checks ---
+install_cli_if_missing "git" "git"
+install_cask_if_missing "Visual Studio Code" "kMDItemAppStoreIdentifier == 'com.microsoft.VSCode'" "visual-studio-code" "Visual Studio Code.app"
+install_cask_if_missing "Zoom" "kMDItemAppStoreIdentifier == 'us.zoom.xos'" "zoom" "zoom.us.app"
+install_cask_if_missing "Docker Desktop" "kMDItemCFBundleIdentifier == 'com.docker.docker'" "docker" "Docker.app"
 
 
 # --- Part 2: Docker Environment Setup ---
