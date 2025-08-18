@@ -64,7 +64,7 @@ install_cask_if_missing() {
 
 # --- Run Checks ---
 install_cli_if_missing "git" "git"
-install_cask_if_missing "Visual Studio Code" "visual-studio-code" "kMDItemAppStoreIdentifier == 'com.microsoft.VSCode'"
+install_cask_if_missing "Visual Studio Code" "visual-studio-code" "kMDItemCFBundleIdentifier == 'com.microsoft.VSCode'"
 install_cask_if_missing "Zoom" "zoom" "kMDItemAppStoreIdentifier == 'us.zoom.xos'"
 install_cask_if_missing "Docker Desktop" "docker" "kMDItemCFBundleIdentifier == 'com.docker.docker'"
 
