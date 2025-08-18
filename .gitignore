@@ -1,0 +1,9 @@
+.gemini/
+gha-creds-*.json
+baremetalai/
+.aider*
+.claude/
+fluent-allocator/
+baremetalai/
+.ssh/
+macro-solver/
