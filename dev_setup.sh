@@ -43,9 +43,10 @@ install_cli_if_missing() {
 install_cask_if_missing() {
     local app_name=$1
     local brew_cask_name=$2
+    local mdfind_query=$3
 
-    # Use 'brew list --cask' to check if the application is installed
-    if brew list --cask | grep -q "^${brew_cask_name}$"; then
+    # Use mdfind (Spotlight search) for a robust check of the application's existence
+    if mdfind "$mdfind_query" | grep -q ".app"; then
         echo "✅ $app_name is already installed."
     else
         echo "$app_name not found. Preparing to install..."
@@ -63,9 +64,9 @@ install_cask_if_missing() {
 
 # --- Run Checks ---
 install_cli_if_missing "git" "git"
-install_cask_if_missing "Visual Studio Code" "visual-studio-code"
-install_cask_if_missing "Zoom" "zoom"
-install_cask_if_missing "Docker Desktop" "docker"
+install_cask_if_missing "Visual Studio Code" "visual-studio-code" "kMDItemAppStoreIdentifier == 'com.microsoft.VSCode'"
+install_cask_if_missing "Zoom" "zoom" "kMDItemAppStoreIdentifier == 'us.zoom.xos'"
+install_cask_if_missing "Docker Desktop" "docker" "kMDItemCFBundleIdentifier == 'com.docker.docker'"
 
 
 # --- Part 2: Docker Environment Setup ---
