@@ -1,0 +1,78 @@
+# --- personal.Dockerfile ---
+# This Dockerfile sets up an environment with Git and SSH,
+# and creates a manual script for key generation.
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV EDITOR=nvim
+
+# Install dependencies, clang, and gcc (required for tree-sitter)
+RUN apt-get update && \
+    apt-get install -y git openssh-client tmux vim curl wget clang gcc sudo fd-find sshfs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install latest Neovim (detect architecture)
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then \
+        NVIM_ARCH="arm64"; \
+    else \
+        NVIM_ARCH="x86_64"; \
+    fi && \
+    wget https://github.com/neovim/neovim/releases/latest/download/nvim-linux-${NVIM_ARCH}.tar.gz && \
+    tar -xzf nvim-linux-${NVIM_ARCH}.tar.gz && \
+    mv nvim-linux-${NVIM_ARCH} /opt/nvim && \
+    ln -s /opt/nvim/bin/nvim /usr/local/bin/nvim && \
+    rm nvim-linux-${NVIM_ARCH}.tar.gz
+
+# Install Node.js and npm
+RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
+    apt-get install -y nodejs
+
+# Install AI CLI tools
+RUN npm install -g @google/gemini-cli
+RUN npm install -g @anthropic-ai/claude-code
+RUN npm install -g @githubnext/github-copilot-cli
+RUN npm install -g opencode-ai
+
+# Configure git to use nvim as the default editor
+RUN git config --global core.editor nvim
+
+# Install LazyVim configuration
+RUN git clone https://github.com/LazyVim/starter /root/.config/nvim && \
+    rm -rf /root/.config/nvim/.git
+
+# Pre-install tree-sitter parsers for neovim
+RUN nvim --headless "+Lazy! sync" +qa 2>&1 || true
+RUN nvim --headless "+TSUpdate" +qa 2>&1 || true
+
+# Create the key generation script directly in the image
+RUN echo '#!/bin/bash' > /usr/local/bin/generate-git-keys && \
+    echo 'echo "--- Git SSH Key Setup ---"' >> /usr/local/bin/generate-git-keys && \
+    echo 'read -p "Please enter your Git user name: " GIT_USER_NAME' >> /usr/local/bin/generate-git-keys && \
+    echo 'read -p "Please enter your Git email address: " GIT_USER_EMAIL' >> /usr/local/bin/generate-git-keys && \
+    echo '' >> /usr/local/bin/generate-git-keys && \
+    echo 'if [ -z "$GIT_USER_NAME" ] || [ -z "$GIT_USER_EMAIL" ]; then' >> /usr/local/bin/generate-git-keys && \
+    echo '    echo "Aborted: Both user name and email are required."' >> /usr/local/bin/generate-git-keys && \
+    echo '    exit 1' >> /usr/local/bin/generate-git-keys && \
+    echo 'fi' >> /usr/local/bin/generate-git-keys && \
+    echo '' >> /usr/local/bin/generate-git-keys && \
+    echo 'git config --global user.name "$GIT_USER_NAME"' >> /usr/local/bin/generate-git-keys && \
+    echo 'git config --global user.email "$GIT_USER_EMAIL"' >> /usr/local/bin/generate-git-keys && \
+    echo '' >> /usr/local/bin/generate-git-keys && \
+    echo 'echo "Generating a new SSH key for $GIT_USER_EMAIL..."' >> /usr/local/bin/generate-git-keys && \
+    echo 'ssh-keygen -t rsa -b 4096 -C "$GIT_USER_EMAIL" -N "" -f /root/.ssh/id_rsa' >> /usr/local/bin/generate-git-keys && \
+    echo '' >> /usr/local/bin/generate-git-keys && \
+    echo 'echo "----------------------------------------------------------------"' >> /usr/local/bin/generate-git-keys && \
+    echo 'echo "ACTION REQUIRED: Add the following public key to your Git provider:"' >> /usr/local/bin/generate-git-keys && \
+    echo 'echo "----------------------------------------------------------------"' >> /usr/local/bin/generate-git-keys && \
+    echo 'cat /root/.ssh/id_rsa.pub' >> /usr/local/bin/generate-git-keys && \
+    echo 'echo "----------------------------------------------------------------"' >> /usr/local/bin/generate-git-keys
+
+# Make the script executable
+RUN chmod +x /usr/local/bin/generate-git-keys
+
+WORKDIR /workspace
+
+# Set the default command to open a bash shell
+CMD ["/bin/bash"]

@@ -1,0 +1,17 @@
+FROM docker:dind
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apk add --no-cache \
+    bash \
+    git \
+    make \
+    curl \
+    openssh-client \
+    sshfs
+
+RUN mkdir -p /root/.ssh && chmod 700 /root/.ssh
+
+WORKDIR /workspace
+
+CMD ["sh", "-c", "dockerd-entrypoint.sh & while ! docker info >/dev/null 2>&1; do sleep 1; done && if [ -d /root/.ssh ]; then chmod 700 /root/.ssh && find /root/.ssh -type f -exec chmod 600 {} \\;; fi && exec bash"]
