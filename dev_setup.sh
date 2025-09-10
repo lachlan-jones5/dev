@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- dev_setup.sh ---
-# This script first ensures Git, VS Code, Zoom, and Docker are installed on macOS,
+# This script first ensures Git, VS Code, and Docker are installed on macOS,
 # then builds and runs a container for an isolated Git environment.
 
 # --- Part 1: Application Installation Checks ---
@@ -65,7 +65,6 @@ install_cask_if_missing() {
 # --- Run Checks ---
 install_cli_if_missing "git" "git"
 install_cask_if_missing "Visual Studio Code" "visual-studio-code" "kMDItemCFBundleIdentifier == 'com.microsoft.VSCode'"
-install_cask_if_missing "Zoom" "zoom" "kMDItemAppStoreIdentifier == 'us.zoom.xos'"
 install_cask_if_missing "Docker Desktop" "docker" "kMDItemCFBundleIdentifier == 'com.docker.docker'"
 
 
