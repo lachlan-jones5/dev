@@ -8,8 +8,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install dependencies
 RUN apt-get update && \
-    apt-get install -y git openssh-client && \
+    apt-get install -y git openssh-client tmux vim && \
     rm -rf /var/lib/apt/lists/*
+
+# Configure git to use vim as the default editor
+RUN git config --global core.editor vim
 
 # Create the key generation script directly in the image
 RUN echo '#!/bin/bash' > /usr/local/bin/generate-git-keys && \
