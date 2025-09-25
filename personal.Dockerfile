@@ -8,8 +8,15 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install dependencies
 RUN apt-get update && \
-    apt-get install -y git openssh-client tmux vim && \
+    apt-get install -y git openssh-client tmux vim curl && \
     rm -rf /var/lib/apt/lists/*
+
+# Install Node.js and npm
+RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
+    apt-get install -y nodejs
+
+# Install Gemini CLI
+RUN npm install -g @google/gemini-cli
 
 # Configure git to use vim as the default editor
 RUN git config --global core.editor vim
