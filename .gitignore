@@ -7,3 +7,4 @@ fluent-allocator/
 baremetalai/
 .ssh/
 macro-solver/
+configs/

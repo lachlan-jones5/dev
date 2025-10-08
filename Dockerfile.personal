@@ -1,4 +1,4 @@
-# --- personal.Dockerfile ---
+# --- Dockerfile.personal ---
 # This Dockerfile sets up an environment with Git and SSH,
 # and creates a manual script for key generation.
 
@@ -6,10 +6,56 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV EDITOR=nvim
+ENV OLLAMA_API_BASE=http://127.0.0.1:11434
+ENV OLLAMA_MODELS=/ollama/models
+ENV OLLAMA_FLASH_ATTENTION=1
+ENV OLLAMA_KV_CACHE_TYPE=q8_0
+ENV OLLAMA_SCHED_SPREAD=1
+ENV OPENAI_API_KEY=ollama
+ENV OPENAI_BASE_URL=http://127.0.0.1:11434/v1
+ENV OPENAI_MODEL=qwen3:4b
 
 # Install dependencies, clang, and gcc (required for tree-sitter)
 RUN apt-get update && \
-    apt-get install -y git openssh-client tmux vim curl wget clang gcc sudo fd-find sshfs rsync && \
+    apt-get install -y \
+    git \
+    openssh-client \
+    tmux \
+    vim \
+    curl \
+    wget \
+    clang \
+    gcc \
+    g++ \
+    sudo \
+    fd-find \
+    rsync \
+    python3 \
+    python3-pip \
+    python3-dev \
+    make \
+    rclone \
+    fuse \
+    iptables \
+    libffi-dev \
+    pkg-config \
+    ca-certificates \
+    gnupg \
+    lsb-release && \
+    rm -rf /var/lib/apt/lists/*
+
+# Configure FUSE to allow other users
+RUN echo "user_allow_other" >> /etc/fuse.conf
+
+# Install Docker
+RUN install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
+    chmod a+r /etc/apt/keyrings/docker.gpg && \
+    echo \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+    $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+    apt-get update && \
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin && \
     rm -rf /var/lib/apt/lists/*
 
 # Install latest Neovim (detect architecture)
@@ -25,25 +71,46 @@ RUN ARCH=$(uname -m) && \
     ln -s /opt/nvim/bin/nvim /usr/local/bin/nvim && \
     rm nvim-linux-${NVIM_ARCH}.tar.gz
 
-# Install Node.js and npm
-RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs
 
 # Install AI CLI tools
-RUN npm install -g @google/gemini-cli
-RUN npm install -g @anthropic-ai/claude-code
-RUN npm install -g @githubnext/github-copilot-cli
 RUN npm install -g opencode-ai
 
-# Install aider
-RUN wget -qO- https://aider.chat/install.sh | sh
+# Install devcontainers CLI
+RUN npm install -g @devcontainers/cli
+
+# Install qwen-code
+RUN npm install -g @qwen-code/qwen-code@latest && \
+    qwen --version
+
+# Install aider using pip
+ENV PATH="/root/.local/bin:${PATH}"
+RUN python3 -m pip install --upgrade pip && \
+    python3 -m pip install aider-install && \
+    aider-install
+
+# Install ollama
+RUN curl -fsSL https://ollama.com/install.sh | sh
 
 # Configure git to use nvim as the default editor
 RUN git config --global core.editor nvim
 
-# Install LazyVim configuration
-RUN git clone https://github.com/LazyVim/starter /root/.config/nvim && \
-    rm -rf /root/.config/nvim/.git
+# Add pip alias and aider aliases to bashrc
+RUN echo "alias pip='pip3'" >> /root/.bashrc
+
+# Clone configs repository and install nvim configuration
+RUN git clone https://github.com/lachlan-jones5/configs.git /tmp/configs && \
+    if [ ! -d "/tmp/configs/nvim" ]; then \
+        echo "ERROR: nvim directory not found in configs repository" && \
+        exit 1; \
+    fi && \
+    mkdir -p /root/.config && \
+    mv /tmp/configs/nvim /root/.config/nvim && \
+    if [ -f "/tmp/configs/.aider.model.settings.yml" ]; then \
+        mv /tmp/configs/.aider.model.settings.yml /root/.aider.model.settings.yml; \
+    fi && \
+    rm -rf /tmp/configs
 
 # Pre-install tree-sitter parsers for neovim
 RUN nvim --headless "+Lazy! sync" +qa 2>&1 || true
@@ -76,6 +143,8 @@ RUN echo '#!/bin/bash' > /usr/local/bin/generate-git-keys && \
 RUN chmod +x /usr/local/bin/generate-git-keys
 
 WORKDIR /workspace
+
+EXPOSE 8501
 
 # Set the default command to open a bash shell
 CMD ["/bin/bash"]

@@ -1,0 +1,82 @@
+FROM git-auth-env:latest
+
+ARG USERNAME=devuser
+ARG USER_UID=1000
+ARG USER_GID=1000
+ARG REMOTE_PATH=/workspace
+ARG LOCAL_MOUNT=/workspace
+ARG GITIGNORE_DIR=/workspace
+
+# Unset ANTHROPIC_API_KEY from base image
+ENV ANTHROPIC_API_KEY=
+
+# Create group with specific GID if it doesn't exist
+RUN if ! getent group $USER_GID >/dev/null; then \
+        groupadd -g $USER_GID $USERNAME; \
+    fi
+
+# Create user with specific UID and GID
+RUN useradd -m -u $USER_UID -g $USER_GID -s /bin/bash $USERNAME
+
+# Add user to docker group
+RUN groupadd -f docker && \
+    usermod -aG docker $USERNAME
+
+# Grant passwordless sudo
+RUN echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME && \
+    chmod 0440 /etc/sudoers.d/$USERNAME
+
+# Set up SSH directory for the user
+RUN mkdir -p /home/$USERNAME/.ssh && \
+    chown -R $USERNAME:$USER_GID /home/$USERNAME/.ssh && \
+    chmod 700 /home/$USERNAME/.ssh
+
+# Copy nvim config from root to user
+RUN mkdir -p /home/$USERNAME/.config && \
+    cp -r /root/.config/nvim /home/$USERNAME/.config/nvim && \
+    chown -R $USERNAME:$USER_GID /home/$USERNAME/.config
+
+# Copy aider config from root to user
+RUN if [ -f /root/.aider.model.settings.yml ]; then \
+        cp /root/.aider.model.settings.yml /home/$USERNAME/.aider.model.settings.yml && \
+        chown $USERNAME:$USER_GID /home/$USERNAME/.aider.model.settings.yml; \
+    fi
+
+# Create ollama directory for local model storage
+RUN mkdir -p /ollama/models && \
+    chown -R $USERNAME:$USER_GID /ollama
+
+# Create local mount directory
+RUN mkdir -p $LOCAL_MOUNT && \
+    chown -R $USERNAME:$USER_GID $LOCAL_MOUNT
+
+# Create alias commands for the user with alternating rpull/rpush logic
+RUN echo "# Initialize sync state variable" >> /home/$USERNAME/.bashrc && \
+    echo "export RPULL_DONE=false" >> /home/$USERNAME/.bashrc && \
+    echo "" >> /home/$USERNAME/.bashrc && \
+    echo "alias rpull='if rsync -avz --progress --delete --exclude-from=\"/\$HOME/.gitignore\" -e \"ssh -F \$HOME/.ssh/config\" vm:$REMOTE_PATH/ $LOCAL_MOUNT/; then export RPULL_DONE=true; echo \"✓ rpull completed. You can now run rpush.\"; else echo \"✗ rpull failed. Cannot proceed to rpush.\"; fi'" >> /home/$USERNAME/.bashrc && \
+    echo "alias rpush='if [ \"\$RPULL_DONE\" = \"true\" ]; then if rsync -avz --progress --exclude-from=\"/\$HOME/.gitignore\" -e \"ssh -F \$HOME/.ssh/config\" $LOCAL_MOUNT/ vm:$REMOTE_PATH/; then export RPULL_DONE=false; echo \"✓ rpush completed. Run rpull before next rpush.\"; else echo \"✗ rpush failed. RPULL_DONE state unchanged.\"; fi; else echo \"✗ Cannot run rpush. You must run rpull first.\"; fi'" >> /home/$USERNAME/.bashrc
+
+RUN echo "alias ai-dumb='OLLAMA_API_BASE=http://host.docker.internal:11434 aider --model ollama_chat/hf.co/unsloth/Phi-4-mini-instruct-GGUF:Q4_K_M --dark-mode --no-auto-commit --watch-files --no-auto-accept-architect --no-git --restore-chat-history'" >> /home/$USERNAME/.bashrc
+RUN echo "alias ai='OLLAMA_API_BASE=http://host.docker.internal:11434 aider --model ollama_chat/hf.co/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF:IQ1_S --dark-mode --no-auto-commit --watch-files --no-auto-accept-architect --no-git --restore-chat-history'" >> /home/$USERNAME/.bashrc
+RUN echo "alias ai-normal='OLLAMA_API_BASE=http://localhost:11435 aider --model ollama_chat/hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:IQ4_XS --dark-mode --no-auto-commit --watch-files --no-auto-accept-architect --no-git --restore-chat-history'" >> /home/$USERNAME/.bashrc
+RUN echo "alias ai-smart='OLLAMA_API_BASE=http://localhost:11435 aider --model ollama_chat/hf.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF:TQ1_0 --dark-mode --no-auto-commit --watch-files --no-auto-accept-architect --no-git --restore-chat-history'" >> /home/$USERNAME/.bashrc
+RUN echo "alias ai-claude='aider --model github_copilot/claude-sonnet-4.5 --dark-mode --no-auto-commit --watch-files --no-auto-accept-architect --no-git --restore-chat-history'" >> /home/$USERNAME/.bashrc
+RUN echo "alias ai-gpt='aider --model github_copilot/gpt-5-mini --dark-mode --no-auto-commit --watch-files --no-auto-accept-architect --no-git --restore-chat-history'" >> /home/$USERNAME/.bashrc
+
+# Clangd workaround for architecture compatibility
+RUN mkdir -p /home/$USERNAME/.local/share/nvim/mason/bin && \
+    mkdir -p /home/$USERNAME/.local/share/nvim/mason/packages/clangd && \
+    ln -s /usr/bin/clangd /home/$USERNAME/.local/share/nvim/mason/bin/clangd && \
+    chown -R $USERNAME:$USER_GID /home/$USERNAME/.local
+
+# Change ownership of /workspace to the user (for sshfs mount)
+RUN chown -R $USERNAME:$USER_GID /workspace
+
+ENV USER=${USERNAME}
+
+WORKDIR /workspace
+
+EXPOSE 8501
+
+CMD ["bash", "-c", "dockerd & while ! docker info >/dev/null 2>&1; do sleep 1; done && exec bash"]
