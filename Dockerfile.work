@@ -1,0 +1,77 @@
+FROM git-auth-env:latest
+
+ARG USERNAME=devuser
+ARG USER_UID=1000
+ARG USER_GID=1000
+ARG REMOTE_PATH=/workspace
+ARG LOCAL_MOUNT=/workspace
+ARG GITIGNORE_DIR=/workspace
+
+# Unset ANTHROPIC_API_KEY from base image
+ENV ANTHROPIC_API_KEY=
+
+# Create group with specific GID if it doesn't exist
+RUN if ! getent group $USER_GID >/dev/null; then \
+        groupadd -g $USER_GID $USERNAME; \
+    fi
+
+# Create user with specific UID and GID
+RUN useradd -m -u $USER_UID -g $USER_GID -s /bin/bash $USERNAME
+
+# Add user to docker group
+RUN groupadd -f docker && \
+    usermod -aG docker $USERNAME
+
+# Grant passwordless sudo
+RUN echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME && \
+    chmod 0440 /etc/sudoers.d/$USERNAME
+
+# Set up SSH directory for the user
+RUN mkdir -p /home/$USERNAME/.ssh && \
+    chown -R $USERNAME:$USER_GID /home/$USERNAME/.ssh && \
+    chmod 700 /home/$USERNAME/.ssh
+
+# Copy nvim config from root to user
+RUN mkdir -p /home/$USERNAME/.config && \
+    cp -r /root/.config/nvim /home/$USERNAME/.config/nvim && \
+    chown -R $USERNAME:$USER_GID /home/$USERNAME/.config
+
+# Copy aider config from root to user
+RUN if [ -f /root/.aider.model.settings.yml ]; then \
+        cp /root/.aider.model.settings.yml /home/$USERNAME/.aider.model.settings.yml && \
+        chown $USERNAME:$USER_GID /home/$USERNAME/.aider.model.settings.yml; \
+    fi
+
+# Create ollama directory for local model storage
+RUN mkdir -p /ollama/models && \
+    chown -R $USERNAME:$USER_GID /ollama
+
+# Create local mount directory
+RUN mkdir -p $LOCAL_MOUNT && \
+    chown -R $USERNAME:$USER_GID $LOCAL_MOUNT
+
+# Create alias commands for the user
+RUN echo "alias rmount='mkdir -p $LOCAL_MOUNT && rclone mount :sftp:vm:$REMOTE_PATH $LOCAL_MOUNT --exclude-from \"/\$HOME/.gitignore\" --vfs-cache-mode full --dir-cache-time 24h --poll-interval 10m --buffer-size 128M --daemon'" >> /home/$USERNAME/.bashrc && \
+    echo "alias rpull='rsync -avz --progress --exclude-from=\"/\$HOME/.gitignore\" -e \"ssh -F \$HOME/.ssh/config\" vm:$REMOTE_PATH/ $LOCAL_MOUNT/'" >> /home/$USERNAME/.bashrc && \
+    echo "alias rpush='rsync -avz --progress --exclude-from=\"/\$HOME/.gitignore\" -e \"ssh -F \$HOME/.ssh/config\" $LOCAL_MOUNT/ vm:$REMOTE_PATH/'" >> /home/$USERNAME/.bashrc
+
+# Override ai aliases from base image
+RUN echo "alias ai='aider --model github_copilot/claude-sonnet-4.5 --dark-mode --no-auto-commit --watch-files --no-auto-accept-architect'" >> /home/$USERNAME/.bashrc && \
+    echo "alias ai-restore='aider --model github_copilot/claude-sonnet-4.5 --dark-mode --no-auto-commit --watch-files --restore-chat-history --no-auto-accept-architect'" >> /home/$USERNAME/.bashrc
+
+# Clangd workaround for architecture compatibility
+RUN mkdir -p /home/$USERNAME/.local/share/nvim/mason/bin && \
+    mkdir -p /home/$USERNAME/.local/share/nvim/mason/packages/clangd && \
+    ln -s /usr/bin/clangd /home/$USERNAME/.local/share/nvim/mason/bin/clangd && \
+    chown -R $USERNAME:$USER_GID /home/$USERNAME/.local
+
+# Change ownership of /workspace to the user (for sshfs mount)
+RUN chown -R $USERNAME:$USER_GID /workspace
+
+ENV USER=${USERNAME}
+
+WORKDIR /workspace
+
+EXPOSE 8501
+
+CMD ["bash", "-c", "dockerd & while ! docker info >/dev/null 2>&1; do sleep 1; done && exec bash"]
